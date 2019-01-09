@@ -1,0 +1,739 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="ICCardMapper">
+
+    <!-- 分页列表 -->
+    <select id="getICCardlistPage" parameterType="page" resultType="pd">
+        select
+        row_number () OVER (ORDER BY ic.ID) AS rowNum,
+        ic.ID as id,
+        ic.CARD_NUM as cardNum,
+        ic.SERIAL_NUM as serialNum,
+        ic.CREATE_TIME as createTime,
+        ic.ENABLE_TIME as enableTime,
+        ic.CARD_TYPE as cardType,
+        ic.CARD_STATUS as cardStatus,
+        ic.INSCODE as inscode,
+        ic.ASSIGN_USER_ID as assignUserId,
+        ic.ASSIGN_TIME as assignTime,
+        ic.RECORD_ID as recordId,
+        ic.IMPORT_USER_ID as importUserId,
+        ic.CANCEL_USER_ID as cancelUserId,
+        ic.CANCEL_TIME as cancelTime,
+        su.USERNAME as userName,
+        i.name as insName
+        from ICCard ic left join sys_user su on ic.ASSIGN_USER_ID=su.USER_ID left join institution i on ic.INSCODE=i.inscode and isnull(i.inscode,'')!=''
+        where 1 = 1
+        <if test="pd.inscode != null and pd.inscode != ''"><!-- 培训机构名称检索 -->
+            and ic.inscode LIKE '%'+#{pd.inscode}+'%'
+        </if>
+        <if test="pd.cardNum != null and pd.cardNum != ''"><!-- 卡号检索 -->
+            and ic.CARD_NUM LIKE '%'+#{pd.cardNum}+'%'
+        </if>
+        <if test="pd.serialNum != null and pd.serialNum != ''"><!-- 卡内码号检索 -->
+            and ic.SERIAL_NUM LIKE '%'+#{pd.serialNum}+'%'
+        </if>
+        <if test="pd.cardType != null and pd.cardType != ''"><!-- 卡类型检索 -->
+            and ic.CARD_TYPE =#{pd.cardType}
+        </if>
+        <if test="pd.recordId != null and pd.recordId != ''"><!-- 卡类型检索 -->
+            and ic.recordId =#{pd.recordId}
+        </if>
+        <if test="pd.startDate != null and pd.startDate != ''"><!-- 发卡日期范围检索 -->
+            and ic.ASSIGN_TIME &gt;=#{pd.startDate}
+        </if>
+        <if test="pd.endDate != null and pd.endDate != ''"><!-- 发卡日期范围检索 -->
+            and ic.ASSIGN_TIME &lt;=#{pd.endDate}
+        </if>
+        <if test="pd.startNum != null and pd.startNum != ''"><!-- 卡号范围检索 -->
+            and ic.CARD_NUM &gt;=#{pd.startNum}
+        </if>
+        <if test="pd.endNum != null and pd.endNum != ''"><!-- 卡号范围检索 -->
+            and ic.CARD_NUM &lt;=#{pd.endNum}
+        </if>
+    </select>
+    <!-- 从excel导入-->
+    <insert id="fromExcel" parameterType="pd">
+        insert into ICCard(
+        CARD_NUM,
+        SERIAL_NUM,
+        CREATE_TIME,
+        ENABLE_TIME,
+        CARD_TYPE,
+        IMPORT_USER_ID
+        ) values (
+        #{cardNum},
+        #{serialNum},
+        #{createTime},
+        #{enableTime},
+        #{cardType},
+        #{importUserId}
+        )
+    </insert>
+    <!--导入检查-->
+    <select id="checkNumber" parameterType="pd" resultType="pd">
+        select * from ICCard
+        where 1=1
+        <if test="cardNum!=null and cardNum!=''">
+            and CARD_NUM=#{cardNum}
+        </if>
+        <if test="serialNum!=null and serialNum!=''">
+            and SERIAL_NUM=#{serialNum}
+        </if>
+        <if test="inscode!=null and inscode!=''">
+            and inscode=#{inscode}
+        </if>
+    </select>
+    <select id="checkSerialNum" parameterType="pd" resultType="pd">
+        select * from ICCard
+        where SERIAL_NUM=#{serialNum}
+    </select>
+    <select id="checkSerialNum4Student" parameterType="pd" resultType="int">
+        SELECT
+			count(1)
+		FROM
+			ICCard ic
+		inner JOIN student s ON ic.SERIAL_NUM = s.CARD_NUM
+		<where>
+		 s.deleted=0
+			<if test="cardNum!=null and cardNum != '' ">
+			and ic.CARD_NUM =#{cardNum}
+			</if>
+			<if test="serialNum!=null and serialNum != '' ">
+			and ic.SERIAL_NUM =#{serialNum}
+			</if>
+			<if test="id!=null and id != '' ">
+			and s.student_id!=#{id}
+			</if>
+		</where>
+    </select>
+    <!-- 增加 -->
+    <insert id="addicCard" parameterType="pd">
+        insert into ICCard (
+        CARD_NUM,
+        SERIAL_NUM,
+        CREATE_TIME,
+        ENABLE_TIME,
+        CARD_TYPE,
+        CARD_STATUS,
+        IMPORT_USER_ID
+        )
+        values (
+        #{cardNum},
+        #{serialNum},
+        #{createTime},
+        #{enableTime},
+        #{cardType},
+        #{cardStatus},
+        #{importUserId}
+        )
+    </insert>
+    <!-- 卡号验证 -->
+    <select id="checkCardNum" parameterType="String" resultType="pd">
+        select
+        cast(isnull(ID,0) as int) as id,
+        SERIAL_NUM as serialNum,
+        CARD_TYPE as cardType,
+        CARD_NUM as cardNum
+        from ICCard
+        where CARD_NUM = #{cardNum} and CARD_STATUS=1
+    </select>
+    
+    <!-- 验证范围内卡号是否是同一驾校的 -->
+    <select id="checkCardNumIsSameInscode" parameterType="pd" resultType="pd">
+        select
+        CARD_NUM as cardNum
+        from ICCard
+        where CARD_NUM BETWEEN #{cardNumBegin} and #{cardNumEnd} and INSCODE != #{inscode}
+    </select>
+    <!-- 验证范围内卡号是否有已制卡成功的 -->
+    <select id="checkCardNumIsMake" parameterType="pd" resultType="pd">
+        select
+        CARD_NUM as cardNum
+        from ICCard
+        where CARD_NUM BETWEEN #{cardNumBegin} and #{cardNumEnd} and CARD_STATUS !=2
+    </select>
+    <!-- 验证范围内卡号是否有已被绑定的 -->
+    <select id="checkCardNumIsBind" parameterType="pd" resultType="pd">
+        select 
+        s.name,
+        c.CARD_NUM
+		from student s LEFT JOIN ICCard c on s.CARD_NUM = c.SERIAL_NUM
+		where c.CARD_NUM BETWEEN #{cardNumBegin} and #{cardNumEnd}
+    </select>
+    
+    <select id="getCardCountByCardId" parameterType="pd" resultType="pd">
+        select
+        *
+        from ICCard
+        where CARD_NUM between #{cardNumBegin} and #{cardNumEnd}
+    </select>
+    
+    <!-- 查询两个卡号之间的所有卡 -->
+    <select id="getCardCount" parameterType="pd" resultType="pd">
+        select
+        *
+        from ICCard
+        where CARD_NUM between #{cardNumBegin} and #{cardNumEnd} and CARD_TYPE=#{cardType} and CARD_STATUS=1
+    </select>
+    <!-- 查询同类型卡的库存信息 -->
+    <select id="getUndiscribeCardCount" parameterType="pd" resultType="pd">
+        select
+        *
+        from ICCard
+        where CARD_TYPE=#{cardType} and CARD_STATUS=1
+    </select>
+    <!--添加分卡记录-->
+    <insert id="addCardRecord" parameterType="pd">
+        insert into ICCard_record (
+        FIRST_CARD_NUM,
+        LAST_CARD_NUM,
+        ASSIGN_TIME,
+        CARD_COUNT,
+        INSCODE,
+        ASSIGN_PEOPLE_ID
+        ) VALUES (
+        #{cardNumBegin},
+        #{cardNumEnd},
+        #{assignTime},
+        #{cardCount},
+        #{inscode},
+        #{assignPeopleId}
+        )
+    </insert>
+    <!-- 更新分卡状态 -->
+    <update id="updateCardStatus" parameterType="pd">
+        update ICCard set
+        CARD_STATUS = #{cardStatus},
+        RECORD_ID = #{recordId},
+        ASSIGN_USER_ID = #{assignUserId},
+        ASSIGN_TIME = #{assignTime},
+        INSCODE = #{inscode}
+        where
+        ID = #{ID}
+    </update>
+    <!-- 查询分卡记录 -->
+    <select id="getLastCardRecord" resultType="pd">
+        select top(1) * from ICCard_record ORDER BY RECORD_ID DESC
+    </select>
+    <!-- 查询分卡的驾培机构 -->
+    <select id="getInstitutionForRecordlistPage" parameterType="page" resultType="pd">
+        select
+        row_number () OVER (ORDER BY a.INSCODE) AS rowNum,
+        a.*,b.cardCount,i.name from
+        (select INSCODE as inscode,count(CARD_NUM) as counts from ICCard where INSCODE is not null group by INSCODE)as a left join
+        (select INSCODE,count(CARD_NUM) as cardCount from ICCard ic where CARD_STATUS=4 group by INSCODE)as b on a.INSCODE=b.INSCODE
+        left join institution i on a.INSCODE=i.inscode
+        where 1=1 and i.deleted=0
+        <if test="pd.inscode != null and pd.inscode != ''">
+            and i.INSCODE=#{pd.inscode}
+        </if>
+    </select>
+     <!-- 制卡和补卡使用 -->
+    <select id="validStuInfoForCard" parameterType="pd" resultType="pd">
+           select 
+       	    s.student_id,
+			s.name,
+			s.CARD_NUM,
+			s.idcard,
+			s.apply_date,
+			s.stu_num,
+			s.stu_num_owner,
+			s.train_type,
+			s.create_time,
+		    s.CreateDate,
+			s.inscode,
+			s.FingerInfo1,
+			s.FingerInfo2,
+			sha.sub_actual_1,
+			sub_actual_2,
+			sub_actual_3,
+			sub_actual_4,
+			sub_measure_1,
+			sub_measure_2,
+			sub_measure_3,
+			sub_measure_4,
+			sub_actual_4,
+			sub_mileage_2,
+			sub_mileage_3,
+			sum_mileage,
+			min_mileage,
+			s.stu_status,
+			i.name as insName
+			FROM
+			student s
+			inner join institution i on s.inscode=i.inscode and isnull(i.inscode,'')!='' and i.deleted=0
+		INNER JOIN student_hour_analysis sha ON s.student_id = sha.stu_id
+        <where>
+         s.deleted=0  and s.stu_status=0
+        <if test="inscode!=null and inscode!='' ">
+           and s.inscode=#{inscode} 
+        </if>
+        <if test="idCard!=null and idCard!='' ">
+            and s.idcard=#{idCard}
+        </if>
+        <if test="serialNum!=null and serialNum!='' ">
+            and s.CARD_NUM=#{serialNum}
+        </if>
+        </where>
+    </select>
+   <select id="validCoachInfoForCard" parameterType="pd" resultType="pd">
+        select
+        	c.id,
+			c.address,
+			c.photo,
+			c.idcard,
+			c.inscode,
+			c.mobile,
+			c.name,
+			c.sex,
+			c.coach_num,
+			c.coach_num_owner,
+			c.coach_type,
+			c.dri_licence,
+			c.dri_permitted,
+			c.employ_status,
+			c.finger_print,
+			c.fst_dri_lic_date,
+			c.hire_date,
+			c.leave_date,
+			c.occupation_level,
+			c.occupation_no,
+			c.teach_permitted,
+			c.create_time,
+			c.create_user,
+			c.update_user,
+			c.update_user,
+			c.deleted,
+			c.record_status,
+			c.coach_type,
+			c.password,
+			c.introduction,
+			c.FingerInfo1,
+			c.FingerInfo2,
+			c.CreateDate,
+			c.CARD_NUM,
+			c.remark,
+			i.name as insName
+	        from coach c 
+	        inner join institution i on c.inscode=i.inscode and isnull(i.inscode,'')!='' and i.deleted=0
+        <where>
+         c.deleted=0 and isnull(c.employ_status,0)=0
+       
+        <if test="inscode!=null and inscode!='' ">
+          and c.inscode=#{inscode}
+         </if>
+        <if test="idCard!=null and idCard!='' ">
+          and c.idcard=#{idCard}
+         </if>
+         </where>
+    </select>
+    <!-- 制卡时更新卡信息 -->
+    <update id="updateStuInfoForMakeCard" parameterType="pd">
+        update student set
+          CARD_NUM=#{CARD_NUM},
+        FingerInfo1=#{FingerInfo1},
+        FingerInfo2=#{FingerInfo2},
+        CreateDate=#{CreateDate}
+          where  student_id =  (SELECT TOP(1) student_id FROM student WHERE idcard=#{idCard} AND inscode=#{inscode} ORDER BY student_id DESC)
+    </update>
+    <update id="updateCoachInfoForMakeCard" parameterType="pd">
+        update coach set
+        CARD_NUM=#{CARD_NUM},
+        FingerInfo1=#{FingerInfo1},
+        FingerInfo2=#{FingerInfo2},
+        CreateDate=#{CreateDate}
+        where idcard=#{idCard}  AND inscode=#{inscode}
+    </update>
+    <update id="updateCardStatusAfterMake" parameterType="pd">
+        update ICCard set
+        CARD_STATUS = #{status},
+        MAKECARD_TIME = #{makeCardTime}
+        where SERIAL_NUM=#{CARD_NUM}
+    </update>
+    
+    <!-- 转移卡时更新卡信息 -->
+    <update id="updateCardStatusByCardNum" parameterType="pd">
+        update ICCard set
+        CARD_STATUS = 2,
+        INSCODE=#{transferInscode}
+        where CARD_NUM BETWEEN #{cardNumBegin} and #{cardNumEnd}
+    </update>
+
+
+    <!-- 根据卡号查询信息 -->
+    <select id="getStuInfoWithCardNo" parameterType="pd" resultType="pd">
+        SELECT
+			s.stu_num,
+			s.name,
+			s.inscode
+		FROM
+			student s
+		WHERE
+			s.deleted = 0
+		AND CARD_NUM =#{cardNo}
+    </select>
+    <select id="getCoachInfoWithCardNo" parameterType="pd" resultType="pd">
+        SELECT
+			c.coach_num,
+			c.coach_type,
+			c.name,
+			c.inscode
+		FROM
+			coach c
+		WHERE
+			c.deleted = 0
+		AND isnull(c.employ_status, 0) = 0
+		AND CARD_NUM =#{cardNo}
+    </select>
+
+    <!-- 添加学员学时信息 -->
+    <insert id="addStudentLoginRecord" parameterType="pd">
+        insert into student_login_record (
+        inscode,
+        StuClassID,
+        stu_num,
+        coach_no,
+        record_type,
+        login_time,
+        train_sub,
+        subject_model,
+        log_code,
+        class_id,
+        create_time,
+        send_time,
+        subject_code,
+        vehicle_type,
+        term_num,
+        train_project,
+        part1,
+        part2,
+        part3,
+        part4,
+        sum_hour,
+        sum_time,
+        valid_status,
+        invalid_reason,
+        stu_id,
+        start_time
+         
+        ) values (
+        #{inscode},
+        #{StuClassID},
+        #{StuNumber},
+        #{TeacherNumber},
+        #{Attendce},
+        #{RecordDate},
+        #{SubjectNo},
+        #{SubjectType},
+        #{log_code},
+        #{class_id},
+        getdate(),
+        #{send_time},
+        #{subject_code},
+        #{vehicle_type},
+        #{term_num},
+        #{train_project},
+        #{part1},
+        #{part2},
+        #{part3},
+        #{part4},
+        #{sum_hour},
+        #{sum_time},
+        #{valid_status},
+        #{invalid_reason},
+        #{stu_id},
+        #{startTime}
+        )
+    </insert>
+    <!-- 添加教练日志信息 -->
+    <insert id="addCoachLoginRecord" parameterType="pd">
+        insert into coach_login_record (
+        coach_no,
+        course,
+        create_time,
+        record_type,
+        send_time,
+        term_num
+        ) values (
+        #{stunumber},
+        #{subjectno},
+        #{recorddate},
+        #{attendce},
+        #{send_time},
+        #{term_num}
+        )
+    </insert>
+
+    <!-- 查询学员的培训车型 -->
+    <select id="getStudentTrainType" parameterType="pd" resultType="pd">
+        select [student_id]
+	      ,[address]
+	      ,[apply_date]
+	      ,[busi_type]
+	      ,[card_type]
+	      ,[dri_licence]
+	      ,[finger_print]
+	      ,[fst_dri_licence]
+	      ,[idcard]
+	      ,[inscode]
+	      ,[name]
+	      ,[nationality]
+	      ,[per_dri_type]
+	      ,[phone]
+	      ,[photo]
+	      ,[sex]
+	      ,[stu_num]
+	      ,[stu_status]
+	      ,[train_type]
+	      ,[create_time]
+	      ,[create_user]
+	      ,[update_time]
+	      ,[update_user]
+	      ,[record_status]
+	      ,[photo_id]
+	      ,[finger_print_id]
+	      ,[train_status]
+	      ,[auth_status]
+	      ,[birthday]
+	      ,[native_place]
+	      ,[charge_package_id]
+	      ,[residence_permit_no]
+	      ,[residence_address]
+	      ,[cross_record]
+	      ,[age]
+	      ,[archive_status]
+	      ,[CreateDate]
+	      ,[examiner_id]
+	      ,[CARD_NUM]
+	      ,[stu_num_owner]
+	      ,[deleted]
+	      ,[pdf_name]
+	      ,[sites_name]
+	      ,[referee]
+	      ,[periods]
+	      ,[remark] from student 
+	      <where> 
+	       deleted=0 and (stu_num=#{StuNumber} OR stu_num_owner=#{StuNumber})
+	      <if test="inscode!=null and inscode!='' ">
+	         and inscode=#{inscode}
+	      </if>
+	      </where>
+	      
+    </select>
+
+    <!-- 查询log_code和class_id-->
+    <select id="getInfoFromLoginRecord" parameterType="pd" resultType="pd">
+        select
+        max(log_code) as log_code,
+        max(class_id) as class_id
+        from student_login_record
+        where stu_num=#{StuNumber}
+        <if test="Attendce == 1">
+            and train_sub=#{SubjectNo} and record_type=0
+        </if>
+    </select>
+
+    <select id="getClassId" resultType="Integer">
+        select max(class_id) as log_code from student_login_record
+    </select>
+
+    <select id="getStudentStudyInfo" parameterType="pd" resultType="pd">
+        select * from student_hour_analysis where stu_id=#{stu_id}
+    </select>
+
+    <select id="getLoginRecordToGetTime" parameterType="pd" resultType="pd" >
+        select login_time from student_login_record where stu_num=#{StuNumber} and class_id=#{class_id} and log_code=#{log_code} and record_type=0
+    </select>
+
+    <update id="updateStudentRecord" parameterType="pd">
+        update student_hour_analysis set
+        sub_actual_1=#{part1},
+        sub_actual_2=#{part2},
+        sub_actual_3=#{part3},
+        sub_actual_4=#{part4},
+        sub_actual_class1=#{sum_time},
+        <if test="sub_actual_simulation2 != null and sub_actual_simulation2 != ''">
+            sub_actual_simulation2=#{sub_actual_simulation2},
+        </if>
+        <if test="sub_actual_simulation3 != null and sub_actual_simulation3 != ''">
+            sub_actual_simulation3=#{sub_actual_simulation3},
+        </if>
+        <if test="sub_start1 != null and sub_start1 != ''">
+            sub_start1=#{sub_start1},
+        </if>
+        <if test="sub_start2 != null and sub_start2 != ''">
+            sub_start2=#{sub_start2},
+        </if>
+        <if test="sub_start3 != null and sub_start3 != ''">
+            sub_start3=#{sub_start3},
+        </if>
+        <if test="sub_start4 != null and sub_start4 != ''">
+            sub_start4=#{sub_start4},
+        </if>
+        sum_actual=#{sum_hour}
+        where stu_id=#{stu_id}
+    </update>
+    <!--查询ic卡的分配信息-->
+    <select id="getICCardInfo" resultType="pd">
+        select count(1) as counts,
+        (select count(1) from ICCard where INSCODE is not null) as discribe,
+        (select count(1) from ICCard where INSCODE is null) as undiscribe,
+        (select count(1) from ICCard where CARD_STATUS=4) as make,
+        (select count(1) from ICCard where CARD_STATUS != 4) as unmake
+        from ICCard
+    </select>
+<!-- 重置卡 -->
+    <update id="ResetCardStatus" parameterType="pd">
+        update ICCard set
+        CARD_STATUS = '2'
+        where
+            CARD_NUM=#{id}
+    </update>
+    <update id="updateStuMakeCard" parameterType="pd">
+        update student set
+        CARD_NUM='',
+        FingerInfo1='',
+        FingerInfo2='',
+        CreateDate=''
+        where inscode=#{inscode} and stu_num=#{stunum}
+    </update>
+    <update id="updateCoachMakeCard" parameterType="pd">
+        update coach set
+        CARD_NUM='',
+        FingerInfo1='',
+        FingerInfo2='',
+        CreateDate=''
+        where inscode=#{inscode} and coach_num=#{coachnum}
+    </update>
+    <select id="getICCardbyNum" resultType="pd">
+        select CARD_STATUS from ICCard where CARD_NUM=#{id}
+    </select>
+
+
+    <select id="findStudentByPd" resultType="pd">
+        SELECT * FROM student where idcard =#{idCard} and inscode=#{inscode}
+    </select>
+    
+     <!-- 新增-->
+    <insert id="saveRegister" parameterType="StudentRegisterModel" useGeneratedKeys="true" keyProperty="stuid">
+        INSERT INTO student (
+        address,
+        apply_date,
+        busi_type,
+        card_type,
+        dri_licence,
+        fst_dri_licence,
+        idcard,
+        inscode,
+        name,
+        nationality,
+        CARD_NUM,
+        per_dri_type,
+        phone,
+        photo,
+        sex ,
+        create_time,
+        create_user,
+        native_place,
+        charge_package_id,
+        residence_permit_no,
+        residence_address,
+        birthday,
+        train_type,
+        examiner_id,
+        sites_name,
+        referee,
+        periods,
+        remark,
+        <if test="stuNum != null and stuNum != ''">
+              stu_num,
+        </if>
+        <if test="recordStatus!=null and recordStatus!=''">
+           record_status,
+        </if>
+        stu_num_owner
+        )
+        VALUES
+        (
+        #{address},
+        #{applydate},
+        #{busitype},
+        #{cardtype},
+        #{drilicence},
+        #{fstDate},
+        #{idcard},
+        #{inscode},
+        #{name},
+        #{nationality},
+        #{cardno},
+        #{perdritype},
+        #{phone},
+        #{photo},
+        #{sex},
+        #{createtime},
+        #{createuser},
+        #{nativeplace},
+        #{packageid},
+        #{residencepermitno},
+        #{residenceaddress},
+        #{birthday},
+        #{traintype},
+        #{examinerId},
+        #{sitesname},
+        #{referee},
+        #{periods},
+        #{remark},
+        <if test="stuNum!=null and stuNum!=''">
+            #{stuNum},
+        </if>
+        <if test="recordStatus!=null and recordStatus!=''">
+           #{recordStatus},
+        </if>
+        #{stunumowner}
+        );
+    </insert>
+    
+    <!-- 查询状态为已分配和已制卡的卡-->
+    <select id="findCardsByForCartPlat" resultType="pd">
+        SELECT
+        	CARD_NUM as cardNum,
+	        SERIAL_NUM as serialNum,
+	        CARD_TYPE as cardType,
+	        CARD_STATUS as status,
+	        INSCODE as inscode,
+	        CONVERT(varchar(100), ASSIGN_TIME, 120) as assignTime,
+			CONVERT(varchar(100), MAKECARD_TIME, 120) as makecardTime
+        FROM ICCard where (CARD_STATUS = 2 or CARD_STATUS = 4) and SEND_STATUS &lt; 2
+    </select>
+    <update id="updateCardSendStatus" parameterType="pd">
+        update ICCard
+        <set>
+            <if test="sendStatus != null and sendStatus != ''">
+                SEND_STATUS=#{sendStatus}
+            </if>
+        </set>
+        where SERIAL_NUM = #{serialNum}
+    </update>
+     <!-- 根据卡号查询 -->
+    <select id="getCardCountByCardNum" parameterType="pd" resultType="pd">
+        select
+            CARD_NUM as cardNum,
+	        SERIAL_NUM as serialNum,
+	        CARD_TYPE as cardType,
+	        CARD_STATUS as status,
+	        INSCODE as inscode,
+	        CONVERT(varchar(100), ASSIGN_TIME, 120) as assignTime,
+			CONVERT(varchar(100), MAKECARD_TIME, 120) as makecardTime
+        from ICCard
+        where CARD_NUM between #{cardNumBegin} and #{cardNumEnd}
+    </select>
+    <!-- 删除IC卡信息 -->
+    <select id="deleteCardBySerialNum">
+        delete from ICCard where SERIAL_NUM in
+        <foreach collection="list" item="item" separator="," open="(" close=")">
+            #{item.serialNum}
+        </foreach>
+        
+    </select>
+</mapper>
